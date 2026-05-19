@@ -1,8 +1,11 @@
 import re
 import json
+import logging
 from datetime import date, timedelta
 from typing import Optional
 from . import browser as br
+
+logger = logging.getLogger(__name__)
 
 
 async def search_nearby(lat: float, lng: float, radius_km: float = 2.0) -> list[dict]:
@@ -33,11 +36,13 @@ async def search_nearby(lat: float, lng: float, radius_km: float = 2.0) -> list[
             pass
 
         content = await page.content()
+        title = await page.title()
+        logger.info(f"[booking] 페이지 제목: {title}, 내용 길이: {len(content)}")
 
-        # 좌표 맵 추출 (페이지 JSON에서)
         coord_map = _extract_coord_map(content)
 
         cards = await page.query_selector_all('[data-testid="property-card"]')
+        logger.info(f"[booking] 카드 수: {len(cards)}")
         for card in cards:
             item = await _parse_card(card, coord_map)
             if item:

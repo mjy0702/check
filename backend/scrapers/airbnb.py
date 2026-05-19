@@ -1,146 +1,118 @@
 import re
 import json
 import asyncio
+import logging
+import httpx
 from datetime import date, timedelta
 from typing import Optional
-from . import browser as br
 
-import httpx
+logger = logging.getLogger(__name__)
 
-HTTPX_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+API_KEY = "d306zoyjsyarp7ifhu67rjxn52tv0t20"
+
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
     "Accept": "application/json",
-    "X-Airbnb-API-Key": "d306zoyjsyarp7ifhu67rjxn52tv0t20",
+    "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8",
+    "X-Airbnb-API-Key": API_KEY,
+    "Referer": "https://www.airbnb.com/",
 }
 
 
 async def search_nearby(lat: float, lng: float, radius_km: float = 2.0) -> list[dict]:
+    delta_lat = radius_km / 111.0
+    delta_lng = radius_km / 88.0
     checkin = (date.today() + timedelta(days=7)).strftime("%Y-%m-%d")
     checkout = (date.today() + timedelta(days=8)).strftime("%Y-%m-%d")
 
-    # 반경을 위경도 델타로 변환 (1도 ≈ 111km)
-    delta_lat = radius_km / 111.0
-    delta_lng = radius_km / 88.0  # 서울 위도 기준
+    url = "https://www.airbnb.com/api/v2/explore_tabs"
+    params = {
+        "key": API_KEY,
+        "currency": "KRW",
+        "locale": "ko",
+        "ne_lat": lat + delta_lat,
+        "ne_lng": lng + delta_lng,
+        "sw_lat": lat - delta_lat,
+        "sw_lng": lng - delta_lng,
+        "search_by_map": "true",
+        "checkin": checkin,
+        "checkout": checkout,
+        "adults": 2,
+        "items_per_grid": 40,
+        "version": "1.8.6",
+        "satori_version": "1.1.8",
+        "screen_size": "large",
+        "query_type": "filter_change",
+        "tab_id": "home_tab",
+        "search_type": "unknown",
+    }
 
-    url = (
-        f"https://www.airbnb.com/s/Seoul--South-Korea/homes"
-        f"?ne_lat={lat+delta_lat}&ne_lng={lng+delta_lng}"
-        f"&sw_lat={lat-delta_lat}&sw_lng={lng-delta_lng}"
-        f"&search_by_map=true&checkin={checkin}&checkout={checkout}"
-        f"&adults=2&items_per_grid=40"
-    )
-
-    ctx = await br.new_context()
     listings = []
     try:
-        page = await ctx.new_page()
-        try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            await page.wait_for_timeout(4000)
-        except Exception:
-            pass
+        async with httpx.AsyncClient(timeout=20, headers=HEADERS, follow_redirects=True) as client:
+            r = await client.get(url, params=params)
+            logger.info(f"[airbnb] API 응답: {r.status_code}")
+            if r.status_code == 200:
+                data = r.json()
+                tabs = data.get("explore_tabs", [])
+                for tab in tabs:
+                    for section in tab.get("sections", []):
+                        for item in section.get("listings", []):
+                            parsed = _parse_listing(
+                                item.get("listing", {}),
+                                item.get("pricing_quote", {}),
+                            )
+                            if parsed:
+                                listings.append(parsed)
+            else:
+                logger.warning(f"[airbnb] API 오류: {r.status_code} {r.text[:200]}")
+    except Exception as e:
+        logger.error(f"[airbnb] 요청 실패: {e}")
 
-        content = await page.content()
-
-        # 카드 목록 추출
-        cards = await page.query_selector_all('[data-testid="card-container"]')
-        for card in cards:
-            item = await _parse_card(card)
-            if item:
-                listings.append(item)
-
-        # 좌표가 없는 항목은 페이지 JSON에서 보충
-        await _enrich_coords(listings, content)
-
-    finally:
-        await ctx.close()
-
+    logger.info(f"[airbnb] {len(listings)}개 결과")
     return listings
 
 
-async def _parse_card(card) -> Optional[dict]:
+def _parse_listing(listing: dict, pricing: dict) -> Optional[dict]:
     try:
-        name_el = await card.query_selector('[data-testid="listing-card-title"]')
-        link_el = await card.query_selector("a[href*='/rooms/']")
-        img_el = await card.query_selector("img")
-        rating_el = await card.query_selector('[aria-label*="점"], [class*="t1a9j9y7"]')
+        lid = str(listing.get("id", ""))
+        name = listing.get("name", "")
+        if not lid or not name:
+            return None
 
-        href = await link_el.get_attribute("href") if link_el else ""
-        listing_id_match = re.search(r"/rooms/(\d+)", href or "")
-        listing_id = listing_id_match.group(1) if listing_id_match else None
+        lat = listing.get("lat")
+        lng = listing.get("lng")
 
-        name = await name_el.inner_text() if name_el else ""
+        price_raw = (
+            pricing.get("rate", {}).get("amount")
+            or pricing.get("price", {}).get("total", {}).get("amount")
+        )
+        price = int(float(str(price_raw))) if price_raw else None
 
-        # 가격: ₩ 패턴
-        html = await card.inner_html()
-        price_matches = re.findall(r"₩([\d,]+)", html)
-        price = int(price_matches[0].replace(",", "")) if price_matches else None
-
-        # 평점
-        rating_text = await rating_el.inner_text() if rating_el else ""
-        rating_match = re.search(r"(\d+\.\d+)", rating_text)
-        rating = float(rating_match.group(1)) if rating_match else None
-
-        img_src = await img_el.get_attribute("src") if img_el else None
+        rating = listing.get("avg_rating") or listing.get("star_rating")
+        review_count = listing.get("reviews_count", 0)
+        pic = listing.get("picture_url") or listing.get("xl_picture_url")
+        room_type = listing.get("room_type_category", "")
 
         return {
-            "id": listing_id,
+            "id": lid,
             "platform": "airbnb",
-            "name": name.strip(),
-            "lat": None,
-            "lng": None,
+            "name": name,
+            "lat": float(lat) if lat else None,
+            "lng": float(lng) if lng else None,
             "price": price,
-            "rating": rating,
-            "review_count": 0,
-            "room_type": "",
-            "url": f"https://www.airbnb.com/rooms/{listing_id}" if listing_id else None,
-            "image": img_src,
+            "rating": float(rating) if rating else None,
+            "review_count": int(review_count) if review_count else 0,
+            "room_type": room_type,
+            "url": f"https://www.airbnb.com/rooms/{lid}",
+            "image": pic,
             "occupancy_rate": None,
         }
     except Exception:
         return None
-
-
-async def _enrich_coords(listings: list[dict], content: str):
-    """페이지 소스에서 좌표 추출해 리스팅에 매핑
-
-    에어비앤비는 base64 인코딩된 ID로 좌표를 저장함.
-    예: "id":"RGVtYW5kU3RheUxpc3Rpbmc6MTIzNDU2" → DemandStayListing:123456
-    """
-    import base64
-
-    coord_map: dict[str, tuple[float, float]] = {}
-
-    # 패턴: base64 ID + coordinate
-    # {20,}: 짧은 "id" 필드(이미지 ID 등)와 혼동 방지
-    pattern = re.compile(
-        r'"id"\s*:\s*"([A-Za-z0-9+/=]{20,})".*?"latitude"\s*:\s*([\d.]+)\s*,\s*"longitude"\s*:\s*([\d.]+)',
-        re.DOTALL,
-    )
-    for m in pattern.finditer(content):
-        b64_id, lat_s, lng_s = m.group(1), m.group(2), m.group(3)
-        try:
-            decoded = base64.b64decode(b64_id).decode("utf-8", errors="ignore")
-            # "DemandStayListing:1234567890" 형태
-            numeric_id = decoded.split(":")[-1].strip()
-            if numeric_id.isdigit():
-                coord_map[numeric_id] = (float(lat_s), float(lng_s))
-        except Exception:
-            pass
-
-    # fallback: latitude/longitude 순서대로 할당
-    if not coord_map:
-        all_coords = re.findall(r'"latitude"\s*:\s*([\d.]+)\s*,\s*"longitude"\s*:\s*([\d.]+)', content)
-        for i, listing in enumerate(listings):
-            if i < len(all_coords):
-                listing["lat"] = float(all_coords[i][0])
-                listing["lng"] = float(all_coords[i][1])
-        return
-
-    for listing in listings:
-        lid = listing.get("id")
-        if lid and lid in coord_map:
-            listing["lat"], listing["lng"] = coord_map[lid]
 
 
 async def get_occupancy_rate(listing_id: str, months: int = 3) -> dict:
@@ -170,7 +142,7 @@ async def get_occupancy_rate(listing_id: str, months: int = 3) -> dict:
 
     total_days = booked_days = 0
     try:
-        async with httpx.AsyncClient(timeout=15, headers=HTTPX_HEADERS) as client:
+        async with httpx.AsyncClient(timeout=15, headers=HEADERS) as client:
             r = await client.get(url, params=params)
             if r.status_code == 200:
                 data = r.json()

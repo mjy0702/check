@@ -3,9 +3,12 @@ Trip.com: Playwright로 페이지 로드 후 fetchRecommendList API 응답 가�
 """
 import re
 import json
+import logging
 from datetime import date, timedelta
 from typing import Optional
 from . import browser as br
+
+logger = logging.getLogger(__name__)
 
 
 async def search_nearby(lat: float, lng: float, radius_km: float = 2.0) -> list[dict]:
@@ -43,6 +46,8 @@ async def search_nearby(lat: float, lng: float, radius_km: float = 2.0) -> list[
             await page.evaluate("window.scrollBy(0, 600)")
             await page.wait_for_timeout(1200)
 
+        title = await page.title()
+        logger.info(f"[tripdotcom] 페이지 제목: {title}, 캡처된 API 응답: {len(captured)}개")
         if captured:
             hotel_list = (
                 captured[0].get("data", {})
