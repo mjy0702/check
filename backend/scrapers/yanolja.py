@@ -3,9 +3,12 @@
 카카오 로컬 API의 숙박 카테고리(AD5)는 모텔·호텔·펜션·리조트·게스트하우스를 모두 포함합니다.
 """
 import os
+import logging
 import httpx
 from datetime import date, timedelta
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 KAKAO_API_KEY = os.getenv("KAKAO_API_KEY", "")
 
@@ -15,6 +18,7 @@ CATEGORY_CODE = "AD5"
 
 async def search_nearby(lat: float, lng: float, radius_km: float = 2.0) -> list[dict]:
     if not KAKAO_API_KEY:
+        logger.warning("[yanolja] KAKAO_API_KEY 미설정 - Render 환경변수에 KAKAO_API_KEY를 추가해야 결과가 나옵니다")
         return await _naver_search(lat, lng, radius_km)
     return await _kakao_search(lat, lng, radius_km)
 
