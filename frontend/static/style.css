@@ -1,0 +1,330 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #f0f2f5;
+  color: #1a1a2e;
+}
+
+.app {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* 사이드바 */
+.sidebar {
+  width: 360px;
+  min-width: 360px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  box-shadow: 2px 0 12px rgba(0,0,0,0.08);
+  z-index: 10;
+}
+
+.logo {
+  padding: 20px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+/* 검색 박스 */
+.search-box {
+  padding: 16px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.search-box label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.search-box input[type="text"],
+.search-box select {
+  padding: 10px 12px;
+  border: 1.5px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+  width: 100%;
+}
+
+.search-box input[type="text"]:focus,
+.search-box select:focus {
+  border-color: #667eea;
+}
+
+.checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.checkbox-group label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 400;
+  color: #333;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+#searchBtn {
+  padding: 12px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  margin-top: 4px;
+}
+
+#searchBtn:hover { opacity: 0.9; }
+#searchBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* 통계 패널 */
+.stats-panel {
+  padding: 16px;
+  border-bottom: 1px solid #eee;
+}
+
+.stats-panel h3 {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  color: #333;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.stat-card {
+  background: #f8f9ff;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: #888;
+  font-weight: 500;
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #667eea;
+}
+
+.platform-breakdown {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.platform-badge {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.platform-badge.airbnb     { background: #ffe0e0; color: #c0392b; }
+.platform-badge.yanolja    { background: #e0f0ff; color: #1a6fc4; }
+.platform-badge.booking    { background: #e0eaff; color: #003580; }
+.platform-badge.tripdotcom { background: #e0f5ec; color: #00743a; }
+.platform-badge.agoda      { background: #fff0e8; color: #c0431b; }
+
+/* 목록 플랫폼 색상 점 */
+.platform-dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.platform-dot--airbnb     { background: #e74c3c; }
+.platform-dot--yanolja    { background: #1a6fc4; }
+.platform-dot--booking    { background: #003580; }
+.platform-dot--tripdotcom { background: #00a651; }
+.platform-dot--agoda      { background: #eb5c28; }
+
+.chart-section h4 {
+  font-size: 13px;
+  color: #555;
+  margin-bottom: 8px;
+}
+
+#occupancyChart { max-height: 150px; }
+
+/* 숙소 목록 */
+.listings-list {
+  flex: 1;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.listing-item {
+  background: #fff;
+  border: 1.5px solid #eee;
+  border-radius: 10px;
+  padding: 12px;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.listing-item:hover, .listing-item.active {
+  border-color: #667eea;
+  box-shadow: 0 2px 8px rgba(102,126,234,0.15);
+}
+
+.listing-item.multi-platform {
+  border-color: #7c3aed;
+  background: linear-gradient(135deg, #faf5ff 0%, #fff 100%);
+}
+
+.listing-item.multi-platform:hover, .listing-item.multi-platform.active {
+  border-color: #6d28d9;
+  box-shadow: 0 2px 10px rgba(124,58,237,0.2);
+}
+
+.listing-thumb-placeholder.multi {
+  background: linear-gradient(135deg, #7c3aed22, #667eea22);
+}
+
+.listing-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #eee;
+  flex-shrink: 0;
+}
+
+.listing-thumb-placeholder {
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #667eea22, #764ba222);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.listing-info { flex: 1; min-width: 0; }
+
+.listing-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a1a2e;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.listing-meta {
+  font-size: 11px;
+  color: #888;
+  margin-top: 2px;
+}
+
+.listing-rates {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.rate-badge {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rate-badge.occupancy { background: #e8f5e9; color: #2e7d32; }
+.rate-badge.vacancy { background: #fff3e0; color: #e65100; }
+.rate-badge.no-data { background: #f5f5f5; color: #999; }
+.rate-badge.platform { background: #ede7f6; color: #5e35b1; }
+
+/* 지도 */
+.map-container {
+  flex: 1;
+  position: relative;
+}
+
+#map { width: 100%; height: 100%; }
+
+/* 로딩 오버레이 */
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  gap: 16px;
+  font-size: 15px;
+  color: #555;
+  font-weight: 500;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #e0e0e0;
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 팝업 */
+.leaflet-popup-content {
+  min-width: 200px;
+  font-family: inherit;
+}
+
+.popup-title {
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.popup-rates { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.popup-link { display: block; margin-top: 8px; font-size: 12px; color: #667eea; }

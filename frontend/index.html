@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>주변 숙소 공실율 분석</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- 사이드바 -->
+    <aside class="sidebar">
+      <h1 class="logo">숙소 공실율 분석</h1>
+
+      <div class="search-box">
+        <label>주소 입력</label>
+        <input id="addressInput" type="text" placeholder="예: 서울 강남구 역삼동" />
+
+        <label>검색 반경</label>
+        <select id="radiusSelect">
+          <option value="1">1km</option>
+          <option value="2">2km</option>
+          <option value="5">5km</option>
+          <option value="10" selected>10km</option>
+          <option value="20">20km</option>
+          <option value="30">30km</option>
+          <option value="50">50km</option>
+          <option value="100">100km</option>
+        </select>
+
+        <label>플랫폼 선택</label>
+        <div class="checkbox-group">
+          <label><input type="checkbox" id="chkAirbnb" checked> 에어비앤비</label>
+          <label><input type="checkbox" id="chkYanolja" checked> 야놀자</label>
+          <label><input type="checkbox" id="chkBooking" checked> 부킹닷컴</label>
+          <label><input type="checkbox" id="chkTrip" checked> 트립닷컴</label>
+          <label><input type="checkbox" id="chkAgoda" checked> 아고다</label>
+        </div>
+
+        <button id="searchBtn" onclick="runSearch()">검색</button>
+      </div>
+
+      <!-- 통계 요약 -->
+      <div class="stats-panel" id="statsPanel" style="display:none">
+        <h3>분석 결과</h3>
+        <div class="stat-grid">
+          <div class="stat-card">
+            <span class="stat-label">평균 예약율</span>
+            <span class="stat-value" id="avgOccupancy">-</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">평균 공실율</span>
+            <span class="stat-value" id="avgVacancy">-</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">총 숙소 수</span>
+            <span class="stat-value" id="totalCount">-</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">평균 가격</span>
+            <span class="stat-value" id="avgPrice">-</span>
+          </div>
+        </div>
+
+        <div class="platform-breakdown" id="platformBreakdown"></div>
+
+        <!-- 예약율 분포 차트 -->
+        <div class="chart-section">
+          <h4>예약율 분포</h4>
+          <canvas id="occupancyChart"></canvas>
+        </div>
+      </div>
+
+      <!-- 숙소 목록 -->
+      <div id="listingsList" class="listings-list"></div>
+    </aside>
+
+    <!-- 지도 -->
+    <main class="map-container">
+      <div id="map"></div>
+      <div id="loadingOverlay" class="loading-overlay" style="display:none">
+        <div class="spinner"></div>
+        <p>숙소 정보 및 예약율 수집 중...</p>
+      </div>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
