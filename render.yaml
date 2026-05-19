@@ -2,7 +2,7 @@ services:
   - type: web
     name: vacancy-tracker
     runtime: python
-    buildCommand: pip install -r requirements.txt && playwright install chromium --with-deps
+    buildCommand: pip install -r requirements.txt && python -m playwright install chromium
     startCommand: bash start.sh
     envVars:
       - key: KAKAO_API_KEY
