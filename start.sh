@@ -10,5 +10,6 @@ if [ -f ../.env ]; then
   export $(grep -v '^#' ../.env | xargs)
 fi
 
-echo "서버 시작: http://localhost:8000"
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+PORT=${PORT:-8000}
+echo "서버 시작: port $PORT"
+uvicorn main:app --host 0.0.0.0 --port "$PORT"
