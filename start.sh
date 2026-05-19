@@ -6,6 +6,9 @@ cd "$(dirname "$0")/backend"
 echo "패키지 설치 확인..."
 pip install -r requirements.txt -q
 
+echo "Playwright Chromium 설치..."
+python -m playwright install chromium
+
 if [ -f ../.env ]; then
   export $(grep -v '^#' ../.env | xargs)
 fi
