@@ -1,10 +1,14 @@
 import asyncio
+import logging
 from datetime import date, timedelta
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from pathlib import Path
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 from scrapers.geocoder import address_to_coords
 from scrapers import airbnb, yanolja, booking, tripdotcom, agoda
@@ -49,6 +53,8 @@ async def search_listings(req: SearchRequest):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    logger.info(f"검색 시작: {req.address} → {coords}, 반경 {req.radius_km}km, 플랫폼 {req.platforms}")
+
     # 플랫폼별 순차 검색 (Playwright 브라우저 부하 분산)
     results = []
     for p in req.platforms:
@@ -58,8 +64,10 @@ async def search_listings(req: SearchRequest):
             result = await PLATFORM_MODULES[p].search_nearby(
                 coords["lat"], coords["lng"], req.radius_km
             )
+            logger.info(f"[{p}] {len(result)}개 결과")
             results.append(result)
-        except Exception:
+        except Exception as e:
+            logger.error(f"[{p}] 오류: {e}", exc_info=True)
             results.append([])
 
     all_listings = []
