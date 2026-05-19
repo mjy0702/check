@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import subprocess
+import sys
 from datetime import date, timedelta
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
@@ -9,6 +11,19 @@ from pathlib import Path
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# 앱 시작 전에 현재 Python(venv)으로 Chromium 설치 보장
+try:
+    result = subprocess.run(
+        [sys.executable, "-m", "playwright", "install", "chromium"],
+        capture_output=True, text=True, timeout=300
+    )
+    if result.returncode == 0:
+        logger.info("Playwright Chromium 설치 완료")
+    else:
+        logger.warning(f"Playwright install 경고: {result.stderr}")
+except Exception as e:
+    logger.error(f"Playwright install 실패: {e}")
 
 from scrapers.geocoder import address_to_coords
 from scrapers import airbnb, yanolja, booking, tripdotcom, agoda
