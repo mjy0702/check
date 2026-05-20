@@ -18,7 +18,6 @@ async function runSearch() {
   const radius = parseFloat(document.getElementById('radiusSelect').value);
   const platforms = [];
   if (document.getElementById('chkAirbnb').checked) platforms.push('airbnb');
-  if (document.getElementById('chkYanolja').checked) platforms.push('yanolja');
   if (document.getElementById('chkBooking').checked) platforms.push('booking');
   if (document.getElementById('chkTrip').checked) platforms.push('tripdotcom');
   if (document.getElementById('chkAgoda').checked) platforms.push('agoda');
