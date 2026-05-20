@@ -26,12 +26,11 @@ except Exception as e:
     logger.error(f"Playwright install 실패: {e}")
 
 from scrapers.geocoder import address_to_coords
-from scrapers import airbnb, yanolja, booking, tripdotcom, agoda
+from scrapers import airbnb, booking, tripdotcom, agoda
 from scrapers import browser as shared_browser
 
 PLATFORM_MODULES = {
     "airbnb": airbnb,
-    "yanolja": yanolja,
     "booking": booking,
     "tripdotcom": tripdotcom,
     "agoda": agoda,
@@ -56,7 +55,7 @@ async def root():
 class SearchRequest(BaseModel):
     address: str
     radius_km: float = 2.0
-    platforms: list[str] = ["airbnb", "yanolja", "booking", "tripdotcom", "agoda"]
+    platforms: list[str] = ["airbnb", "booking", "tripdotcom", "agoda"]
     fetch_occupancy: bool = True
 
 
