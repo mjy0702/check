@@ -66,77 +66,95 @@ async def search_nearby(lat: float, lng: float, radius_km: float = 2.0) -> list[
 
 
 def _parse_html(html: str) -> list[dict]:
-    # __NEXT_DATA__ 시도
-    m = re.search(
-        r'<script[^>]+id="__NEXT_DATA__"[^>]*>(.*?)</script>',
-        html, re.DOTALL,
-    )
+    # staysSearch → searchResults 직접 추출 (균형 브래킷 파서)
+    results = _extract_stays_search(html)
+    if results:
+        logger.info(f"[airbnb] staysSearch에서 {len(results)}개 발견")
+        return results
+
+    # __NEXT_DATA__ fallback
+    m = re.search(r'<script[^>]*id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.DOTALL)
+    if not m:
+        m = re.search(r'<script[^>]*type="application/json"[^>]*id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.DOTALL)
     if m:
         try:
             data = json.loads(m.group(1))
-            # 구조 디버깅용 키 로그
-            pp = data.get("props", {}).get("pageProps", {})
-            logger.info(f"[airbnb] pageProps keys: {list(pp.keys())[:10]}")
-
-            # 가능한 경로들 순서대로 시도
-            candidates = [
-                ["props", "pageProps", "staysSearch", "results", "searchResults"],
-                ["props", "pageProps", "initialData", "staysSearch", "results", "searchResults"],
-                ["props", "pageProps", "data", "staysSearch", "results", "searchResults"],
-                ["props", "pageProps", "bootstrapData", "reduxData", "homePDP", "listing"],
-            ]
-            for path in candidates:
-                results = _dig(data, path)
-                if results and isinstance(results, list) and len(results) > 0:
-                    logger.info(f"[airbnb] 경로 {path[-2:]}에서 {len(results)}개 발견")
-                    return [r for r in (_parse_result(x) for x in results) if r]
-
-            # niobeMinimalClientData 패턴 (최신 Airbnb)
-            niobe_m = re.search(r'data-deferred-state[^>]*>(.*?)</script>', html, re.DOTALL)
-            if niobe_m:
-                nd = json.loads(niobe_m.group(1))
-                results = _find_search_results(nd)
-                if results:
-                    logger.info(f"[airbnb] deferred-state에서 {len(results)}개 발견")
-                    return [r for r in (_parse_result(x) for x in results) if r]
-
+            found = _find_search_results(data)
+            if found:
+                logger.info(f"[airbnb] __NEXT_DATA__에서 {len(found)}개 발견")
+                return [r for r in (_parse_result(x) for x in found) if r]
         except Exception as e:
             logger.warning(f"[airbnb] __NEXT_DATA__ 파싱 실패: {e}")
-
-    # 정규식 fallback - 여러 키 패턴 시도
-    for key in ["searchResults", "staySearchResults", "resultSections", "listings"]:
-        m2 = re.search(rf'"{key}"\s*:\s*(\[.*?\])\s*[,}}]', html, re.DOTALL)
-        if m2:
-            try:
-                results = json.loads(m2.group(1))
-                parsed = [r for r in (_parse_result(x) for x in results[:40]) if r]
-                if parsed:
-                    logger.info(f"[airbnb] 정규식({key})에서 {len(parsed)}개 발견")
-                    return parsed
-            except Exception:
-                pass
 
     if len(html) < 10000:
         logger.warning(f"[airbnb] 페이지 짧음({len(html)}자) - 봇 차단 가능성")
     else:
-        # 진단: 실제 키 찾기
-        keys_found = re.findall(r'"([a-zA-Z]{5,20}Search[a-zA-Z]*)"\s*:', html[:500000])
-        logger.warning(f"[airbnb] 파싱 실패. HTML에서 발견된 Search 관련 키: {list(set(keys_found))[:10]}")
-
+        logger.warning(f"[airbnb] 파싱 실패 (HTML {len(html)}자)")
     return []
 
 
-def _find_search_results(data, depth=0) -> list:
-    """재귀적으로 searchResults 배열을 찾습니다."""
-    if depth > 6:
+def _extract_stays_search(html: str) -> list[dict]:
+    """staysSearch 키에서 searchResults 배열을 직접 추출."""
+    idx = html.find('"staysSearch"')
+    if idx == -1:
         return []
-    if isinstance(data, list) and len(data) > 2:
-        first = data[0] if data else {}
+    window = html[idx: idx + 2000000]
+    sr_idx = window.find('"searchResults"')
+    if sr_idx == -1:
+        return []
+    arr_start = window.find('[', sr_idx + len('"searchResults"'))
+    if arr_start == -1:
+        return []
+    array_str = _extract_json_array(window, arr_start)
+    if not array_str:
+        return []
+    try:
+        results = json.loads(array_str)
+        return [r for r in (_parse_result(x) for x in results) if r]
+    except Exception as e:
+        logger.warning(f"[airbnb] searchResults JSON 파싱 실패: {e}")
+        return []
+
+
+def _extract_json_array(text: str, start: int) -> Optional[str]:
+    """start 위치에서 시작하는 JSON 배열을 균형 브래킷으로 추출."""
+    if start >= len(text) or text[start] != '[':
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if escape:
+            escape = False
+            continue
+        if ch == '\\' and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == '[':
+            depth += 1
+        elif ch == ']':
+            depth -= 1
+            if depth == 0:
+                return text[start: i + 1]
+    return None
+
+
+def _find_search_results(data, depth=0) -> list:
+    if depth > 8:
+        return []
+    if isinstance(data, list) and len(data) > 0:
+        first = data[0]
         if isinstance(first, dict) and ("listing" in first or "id" in first):
             return data
     if isinstance(data, dict):
-        for key in ["searchResults", "staySearchResults", "listings", "results"]:
-            if key in data:
+        for key in ["searchResults", "staySearchResults", "listings"]:
+            if key in data and isinstance(data[key], list) and data[key]:
                 found = _find_search_results(data[key], depth + 1)
                 if found:
                     return found
