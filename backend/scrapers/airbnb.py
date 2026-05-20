@@ -178,43 +178,56 @@ def _dig(data, keys):
 
 def _parse_result(item: dict) -> Optional[dict]:
     try:
-        listing = item.get("listing") or {}
-        pricing = item.get("pricingQuote") or item.get("pricing_quote") or {}
+        # 최신 Airbnb 구조: 플랫 객체, listing 키 없음
+        demand = item.get("demandStayListing") or {}
 
-        lid = str(listing.get("id") or item.get("id") or "")
-        name = (
-            listing.get("name") or listing.get("title")
-            or item.get("name") or ""
-        )
-        if not lid or not name:
+        # ID: demandStayListing.id 는 base64 → 숫자 추출
+        import base64 as _b64
+        b64_id = demand.get("id", "")
+        if b64_id:
+            decoded = _b64.b64decode(b64_id).decode("utf-8", errors="ignore")
+            lid = decoded.split(":")[-1].strip()
+        else:
+            lid = str(item.get("id") or "")
+        if not lid:
             return None
 
-        coord = listing.get("coordinate") or {}
-        lat = coord.get("latitude") or listing.get("lat")
-        lng = coord.get("longitude") or listing.get("lng")
+        name_raw = item.get("nameLocalized") or item.get("title") or ""
+        if isinstance(name_raw, dict):
+            name = name_raw.get("localizedStringWithTranslationPreference") or name_raw.get("string") or ""
+        else:
+            name = str(name_raw)
+        if not name:
+            return None
 
-        price_raw = (
-            _dig(pricing, ["structuredStayDisplayPrice", "primaryLine", "price"])
-            or _dig(pricing, ["rate", "amount"])
-            or _dig(pricing, ["price", "total", "amount"])
-        )
-        price = _extract_price(price_raw)
+        # 좌표
+        coord = _dig(demand, ["location", "coordinate"]) or {}
+        lat = coord.get("latitude")
+        lng = coord.get("longitude")
 
-        rating_raw = (
-            listing.get("avgRatingLocalized")
-            or listing.get("avgRating")
-            or listing.get("avg_rating")
+        # 가격: structuredDisplayPrice.primaryLine.discountedPrice 또는 price
+        price_str = (
+            _dig(item, ["structuredDisplayPrice", "primaryLine", "discountedPrice"])
+            or _dig(item, ["structuredDisplayPrice", "primaryLine", "price"])
         )
+        price = _extract_price(price_str)
+
+        # 평점
+        rating_raw = item.get("avgRatingLocalized") or item.get("avgRating") or ""
         if isinstance(rating_raw, str):
             rm = re.search(r"[\d.]+", rating_raw)
             rating = float(rm.group()) if rm else None
         else:
             rating = float(rating_raw) if rating_raw else None
 
-        review_count = listing.get("reviewsCount") or listing.get("reviews_count") or 0
-        pics = listing.get("contextualPictures") or []
-        pic = pics[0].get("picture") if pics else listing.get("picture_url")
-        room_type = listing.get("roomTypeCategory") or listing.get("room_type_category") or ""
+        # 이미지
+        pics = item.get("contextualPictures") or []
+        pic = pics[0].get("picture") if pics else None
+
+        # 리뷰 수 (avgRatingA11yLabel에서 추출)
+        review_text = item.get("avgRatingA11yLabel") or ""
+        rv = re.search(r"후기\s*([\d,]+)개", review_text)
+        review_count = int(rv.group(1).replace(",", "")) if rv else 0
 
         return {
             "id": lid,
@@ -224,8 +237,8 @@ def _parse_result(item: dict) -> Optional[dict]:
             "lng": float(lng) if lng else None,
             "price": price,
             "rating": rating,
-            "review_count": int(review_count) if review_count else 0,
-            "room_type": room_type,
+            "review_count": review_count,
+            "room_type": "",
             "url": f"https://www.airbnb.com/rooms/{lid}",
             "image": pic,
             "occupancy_rate": None,
