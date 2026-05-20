@@ -74,43 +74,77 @@ def _parse_html(html: str) -> list[dict]:
     if m:
         try:
             data = json.loads(m.group(1))
-            results = _dig(data, [
-                "props", "pageProps", "staysSearch", "results", "searchResults"
-            ])
-            if not results:
-                # 다른 경로 시도
-                results = _dig(data, [
-                    "props", "pageProps", "initialData", "staysSearch",
-                    "results", "searchResults"
-                ])
-            if results:
-                logger.info(f"[airbnb] __NEXT_DATA__에서 {len(results)}개 발견")
-                return [r for r in (_parse_result(x) for x in results) if r]
+            # 구조 디버깅용 키 로그
+            pp = data.get("props", {}).get("pageProps", {})
+            logger.info(f"[airbnb] pageProps keys: {list(pp.keys())[:10]}")
+
+            # 가능한 경로들 순서대로 시도
+            candidates = [
+                ["props", "pageProps", "staysSearch", "results", "searchResults"],
+                ["props", "pageProps", "initialData", "staysSearch", "results", "searchResults"],
+                ["props", "pageProps", "data", "staysSearch", "results", "searchResults"],
+                ["props", "pageProps", "bootstrapData", "reduxData", "homePDP", "listing"],
+            ]
+            for path in candidates:
+                results = _dig(data, path)
+                if results and isinstance(results, list) and len(results) > 0:
+                    logger.info(f"[airbnb] 경로 {path[-2:]}에서 {len(results)}개 발견")
+                    return [r for r in (_parse_result(x) for x in results) if r]
+
+            # niobeMinimalClientData 패턴 (최신 Airbnb)
+            niobe_m = re.search(r'data-deferred-state[^>]*>(.*?)</script>', html, re.DOTALL)
+            if niobe_m:
+                nd = json.loads(niobe_m.group(1))
+                results = _find_search_results(nd)
+                if results:
+                    logger.info(f"[airbnb] deferred-state에서 {len(results)}개 발견")
+                    return [r for r in (_parse_result(x) for x in results) if r]
+
         except Exception as e:
             logger.warning(f"[airbnb] __NEXT_DATA__ 파싱 실패: {e}")
 
-    # 정규식 fallback
-    for pattern in [
-        r'"searchResults"\s*:\s*(\[.*?\])\s*[,}]',
-        r'"staysSearch".*?"searchResults"\s*:\s*(\[.*?\])',
-    ]:
-        m2 = re.search(pattern, html, re.DOTALL)
+    # 정규식 fallback - 여러 키 패턴 시도
+    for key in ["searchResults", "staySearchResults", "resultSections", "listings"]:
+        m2 = re.search(rf'"{key}"\s*:\s*(\[.*?\])\s*[,}}]', html, re.DOTALL)
         if m2:
             try:
                 results = json.loads(m2.group(1))
                 parsed = [r for r in (_parse_result(x) for x in results[:40]) if r]
                 if parsed:
-                    logger.info(f"[airbnb] 정규식에서 {len(parsed)}개 발견")
+                    logger.info(f"[airbnb] 정규식({key})에서 {len(parsed)}개 발견")
                     return parsed
             except Exception:
                 pass
 
-    # 페이지 크기로 봇 차단 감지
     if len(html) < 10000:
-        logger.warning(f"[airbnb] 페이지 너무 짧음({len(html)}자) - 봇 차단 가능성")
+        logger.warning(f"[airbnb] 페이지 짧음({len(html)}자) - 봇 차단 가능성")
     else:
-        logger.warning(f"[airbnb] searchResults 패턴 없음 - 페이지 구조 변경됨")
+        # 진단: 실제 키 찾기
+        keys_found = re.findall(r'"([a-zA-Z]{5,20}Search[a-zA-Z]*)"\s*:', html[:500000])
+        logger.warning(f"[airbnb] 파싱 실패. HTML에서 발견된 Search 관련 키: {list(set(keys_found))[:10]}")
 
+    return []
+
+
+def _find_search_results(data, depth=0) -> list:
+    """재귀적으로 searchResults 배열을 찾습니다."""
+    if depth > 6:
+        return []
+    if isinstance(data, list) and len(data) > 2:
+        first = data[0] if data else {}
+        if isinstance(first, dict) and ("listing" in first or "id" in first):
+            return data
+    if isinstance(data, dict):
+        for key in ["searchResults", "staySearchResults", "listings", "results"]:
+            if key in data:
+                found = _find_search_results(data[key], depth + 1)
+                if found:
+                    return found
+        for v in data.values():
+            if isinstance(v, (dict, list)):
+                found = _find_search_results(v, depth + 1)
+                if found:
+                    return found
     return []
 
 

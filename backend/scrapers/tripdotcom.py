@@ -15,12 +15,14 @@ async def search_nearby(lat: float, lng: float, radius_km: float = 2.0) -> list[
     checkin = date.today() + timedelta(days=1)
     checkout = date.today() + timedelta(days=2)
 
+    # 좌표 기반 검색 URL (도시 코드 대신 위경도 사용)
     url = (
-        f"https://kr.trip.com/hotels/list?city=294217"
-        f"&checkin={checkin.strftime('%Y%m%d')}"
+        f"https://kr.trip.com/hotels/list"
+        f"?checkin={checkin.strftime('%Y%m%d')}"
         f"&checkout={checkout.strftime('%Y%m%d')}"
-        f"&adult=2&curr=KRW"
+        f"&adult=2&curr=KRW&lat={lat}&lon={lng}&distance={int(radius_km)}"
     )
+    logger.info(f"[tripdotcom] URL: {url}")
 
     ctx = await br.new_context()
     captured = []
